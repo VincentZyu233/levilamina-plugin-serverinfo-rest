@@ -61,6 +61,16 @@ jobs:
         with:
           xmake-version: latest
 
+      - name: 💾 Cache xmake packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/.xmake/packages
+            ~/AppData/Local/.xmake/packages
+          key: ${{ runner.os }}-xmake-${{ hashFiles('xmake.lua') }}
+          restore-keys: |
+            ${{ runner.os }}-xmake-
+
       - name: 📦 Update xmake repositories
         run: xmake repo -u
 

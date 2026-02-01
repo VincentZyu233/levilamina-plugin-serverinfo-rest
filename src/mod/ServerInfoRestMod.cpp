@@ -43,19 +43,15 @@ bool ServerInfoRestMod::load() {
     
     // ASCII Art Banner
     logger.info("");
-    logger.info(R"(                                     _        __      )");
-    logger.info(R"(   ________  ______   _____  _____  (_)___   / _/___  )");
-    logger.info(R"(  / ___/ _ \/ ___/ | / / _ \/ ___/ / / __ \ / /_/ __ \)");
-    logger.info(R"( (__  )  __/ /   | |/ /  __/ /    / / / / // __/ /_/ /)");
-    logger.info(R"(/____/\___/_/    |___/\___/_/    /_/_/ /_//_/  \____/ )");
-    logger.info(R"(                                                      )");
-    logger.info(R"(          ________  _________                         )");
-    logger.info(R"(         / ___/ _ \/ ___/ __/                         )");
-    logger.info(R"(        / /  /  __(__  ) /                            )");
-    logger.info(R"(       /_/   \___/____/_/                             )");
+    logger.info(R"(                                   _       ____                           __)");
+    logger.info(R"(   ________  ______   _____  _____(_)___  / __/___        ________  _____/ /_)");
+    logger.info(R"(  / ___/ _ \/ ___/ | / / _ \/ ___/ / __ \/ /_/ __ \______/ ___/ _ \/ ___/ __/)");
+    logger.info(R"( (__  )  __/ /   | |/ /  __/ /  / / / / / __/ /_/ /_____/ /  /  __(__  ) /_  )");
+    logger.info(R"(/____/\___/_/    |___/\___/_/  /_/_/ /_/_/  \____/     /_/   \___/____/\__/  )");
     logger.info("");
     logger.info("  Author: VincentZyu");
-    logger.info("  GitHub: https://github.com/VincentZyu233");
+    logger.info("  GitHub Profile: https://github.com/VincentZyu233");
+    logger.info("  GitHub Repo: https://github.com/VincentZyu233/levilamina-plugin-serverinfo-rest");
     logger.info("");
 
     // 读取配置文件

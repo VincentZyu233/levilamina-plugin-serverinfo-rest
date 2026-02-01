@@ -1,19 +1,6 @@
-#include "ll/api/memory/Memory.h"
+// This file will make your mod use LeviLamina's memory operators by default.
+// This improves the memory management of your mod and is recommended to use.
 
-extern "C" _declspec(dllexport) void ll_memory_operator_overload_inject() {
-    static bool injected = false;
-    if (injected) return;
-    injected = true;
-}
+#define LL_MEMORY_OPERATORS
 
-void* operator new(size_t size) { return ll::memory::allocate(size); }
-
-void operator delete(void* ptr) noexcept { ll::memory::deallocate(ptr); }
-
-void* operator new[](size_t size) { return ll::memory::allocate(size); }
-
-void operator delete[](void* ptr) noexcept { ll::memory::deallocate(ptr); }
-
-void operator delete(void* ptr, size_t) noexcept { ll::memory::deallocate(ptr); }
-
-void operator delete[](void* ptr, size_t) noexcept { ll::memory::deallocate(ptr); }
+#include "ll/api/memory/MemoryOperators.h" // IWYU pragma: keep
