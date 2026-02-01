@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 serverinfo-rest API 测试脚本
-用法: python test_api.py --host <host> --port <port>
+用法: python test_api.py --host <host> --port <port> --token <token>
 """
 
 import argparse

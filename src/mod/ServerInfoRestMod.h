@@ -13,9 +13,9 @@ class ServerInfoRestMod {
 public:
     static ServerInfoRestMod& getInstance();
 
-    ServerInfoRestMod() = default;
+    ServerInfoRestMod() : mSelf(*ll::mod::NativeMod::current()) {}
 
-    [[nodiscard]] ll::mod::NativeMod& getSelf() const { return *mSelf; }
+    [[nodiscard]] ll::mod::NativeMod& getSelf() const { return mSelf; }
 
     bool load();
     bool enable();
@@ -26,7 +26,7 @@ public:
     [[nodiscard]] HttpServer* getHttpServer() const { return mHttpServer.get(); }
 
 private:
-    ll::mod::NativeMod* mSelf = nullptr;
+    ll::mod::NativeMod& mSelf;
     Config mConfig;
     std::unique_ptr<HttpServer> mHttpServer;
 };
