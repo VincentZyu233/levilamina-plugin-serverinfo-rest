@@ -19,6 +19,10 @@ struct Config {
     
     // API 路径前缀
     std::string apiPrefix = "/api/v1";
+    
+    // Token 认证配置
+    bool enableToken = false;  // 是否启用 token 验证
+    std::string token = "";    // 访问令牌，启用后需要在请求中附带 ?token=xxx
 };
 
 } // namespace serverinfo_rest

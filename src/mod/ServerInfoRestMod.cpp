@@ -75,6 +75,13 @@ bool ServerInfoRestMod::load() {
     logger.debug("  - port: {}", mConfig.port);
     logger.debug("  - enableCors: {}", mConfig.enableCors);
     logger.debug("  - apiPrefix: {}", mConfig.apiPrefix);
+    logger.debug("  - enableToken: {}", mConfig.enableToken);
+    if (mConfig.enableToken) {
+        logger.info("Token authentication is ENABLED");
+        if (mConfig.token.empty()) {
+            logger.warn("Token is empty! Please set a token in config.json");
+        }
+    }
 
     logger.info("serverinfo-rest loaded successfully!");
     return true;
@@ -94,10 +101,52 @@ bool ServerInfoRestMod::enable() {
 
     std::string prefix = mConfig.apiPrefix;
 
+    // Token 验证辅助函数
+    auto validateToken = [this](const HttpRequest& req, HttpResponse& res) -> bool {
+        if (!mConfig.enableToken) {
+            return true; // 未启用 token 验证，直接通过
+        }
+        
+        // 从 query string 中提取 token
+        std::string reqToken;
+        std::istringstream queryStream(req.query);
+        std::string param;
+        
+        while (std::getline(queryStream, param, '&')) {
+            size_t eqPos = param.find('=');
+            if (eqPos != std::string::npos) {
+                std::string key = param.substr(0, eqPos);
+                std::string value = param.substr(eqPos + 1);
+                if (key == "token") {
+                    reqToken = value;
+                    break;
+                }
+            }
+        }
+        
+        if (reqToken.empty()) {
+            res.setStatus(401, "Unauthorized");
+            res.setJson("{\"error\": \"Missing token parameter\"}");
+            getSelf().getLogger().debug("Request rejected: missing token");
+            return false;
+        }
+        
+        if (reqToken != mConfig.token) {
+            res.setStatus(403, "Forbidden");
+            res.setJson("{\"error\": \"Invalid token\"}");
+            getSelf().getLogger().debug("Request rejected: invalid token");
+            return false;
+        }
+        
+        return true;
+    };
+
     // ==================== 注册 API 路由 ====================
 
     // GET /api/v1/status - 服务器状态
-    mHttpServer->get(prefix + "/status", [this](const HttpRequest&, HttpResponse& res) {
+    mHttpServer->get(prefix + "/status", [this, validateToken](const HttpRequest& req, HttpResponse& res) {
+        if (!validateToken(req, res)) return;
+        
         nlohmann::json json;
         json["status"] = "online";
         json["plugin"] = "serverinfo-rest";
@@ -119,7 +168,9 @@ bool ServerInfoRestMod::enable() {
     });
 
     // GET /api/v1/players - 获取玩家列表
-    mHttpServer->get(prefix + "/players", [this](const HttpRequest&, HttpResponse& res) {
+    mHttpServer->get(prefix + "/players", [this, validateToken](const HttpRequest& req, HttpResponse& res) {
+        if (!validateToken(req, res)) return;
+        
         nlohmann::json json;
         json["players"] = nlohmann::json::array();
         
@@ -140,7 +191,9 @@ bool ServerInfoRestMod::enable() {
     });
 
     // GET /api/v1/players/count - 获取玩家数量
-    mHttpServer->get(prefix + "/players/count", [this](const HttpRequest&, HttpResponse& res) {
+    mHttpServer->get(prefix + "/players/count", [this, validateToken](const HttpRequest& req, HttpResponse& res) {
+        if (!validateToken(req, res)) return;
+        
         nlohmann::json json;
         
         auto level = ll::service::getLevel();
@@ -159,7 +212,9 @@ bool ServerInfoRestMod::enable() {
     });
 
     // GET /api/v1/players/names - 获取玩家名列表
-    mHttpServer->get(prefix + "/players/names", [this](const HttpRequest&, HttpResponse& res) {
+    mHttpServer->get(prefix + "/players/names", [this, validateToken](const HttpRequest& req, HttpResponse& res) {
+        if (!validateToken(req, res)) return;
+        
         nlohmann::json json;
         json["names"] = nlohmann::json::array();
         
@@ -176,8 +231,10 @@ bool ServerInfoRestMod::enable() {
     });
 
     // GET /api/v1/player/{name} - 获取指定玩家信息
-    // 由于简单的路由系统不支持参数，我们使用 query string: /api/v1/player?name=xxx
-    mHttpServer->get(prefix + "/player", [this](const HttpRequest& req, HttpResponse& res) {
+    // 由于简单的路由系统不支持参数，我们使用 query string: /api/v1/player?name=xxx&token=xxx
+    mHttpServer->get(prefix + "/player", [this, validateToken](const HttpRequest& req, HttpResponse& res) {
+        if (!validateToken(req, res)) return;
+        
         // 解析 query string 获取 name
         std::string playerName;
         std::istringstream queryStream(req.query);
@@ -211,8 +268,9 @@ bool ServerInfoRestMod::enable() {
                     json["name"] = player.getRealName();
                     json["xuid"] = player.getXuid();
                     json["uuid"] = player.getUuid().asString();
-                    json["health"] = player.getHealth();
-                    json["maxHealth"] = player.getMaxHealth();
+                    // 注意: getHealth/getMaxHealth 在某些 BDS 版本可能不可用
+                    // json["health"] = player.getHealth();
+                    // json["maxHealth"] = player.getMaxHealth();
                     json["ipAndPort"] = player.getIPAndPort();
                     json["locale"] = player.getLocaleCode();
                     json["isOperator"] = player.isOperator();
@@ -240,7 +298,9 @@ bool ServerInfoRestMod::enable() {
     });
 
     // GET /api/v1/server - 服务器信息
-    mHttpServer->get(prefix + "/server", [this](const HttpRequest&, HttpResponse& res) {
+    mHttpServer->get(prefix + "/server", [this, validateToken](const HttpRequest& req, HttpResponse& res) {
+        if (!validateToken(req, res)) return;
+        
         nlohmann::json json;
         
         auto level = ll::service::getLevel();
@@ -259,7 +319,7 @@ bool ServerInfoRestMod::enable() {
         res.setJson(json.dump());
     });
 
-    // GET /api/v1/health - 健康检查端点
+    // GET /api/v1/health - 健康检查端点 (不需要 token，用于监控)
     mHttpServer->get(prefix + "/health", [](const HttpRequest&, HttpResponse& res) {
         res.setJson("{\"status\": \"healthy\"}");
     });

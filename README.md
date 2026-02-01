@@ -35,7 +35,9 @@
     "host": "0.0.0.0",
     "port": 60202,
     "enableCors": true,
-    "apiPrefix": "/api/v1"
+    "apiPrefix": "/api/v1",
+    "enableToken": false,
+    "token": ""
 }
 ```
 
@@ -49,6 +51,27 @@
 | `port` | int | `60202` | HTTP 服务器监听端口 |
 | `enableCors` | bool | `true` | 是否启用 CORS |
 | `apiPrefix` | string | `"/api/v1"` | API 路径前缀 |
+| `enableToken` | bool | `false` | 是否启用 Token 认证 |
+| `token` | string | `""` | 访问令牌 |
+
+### Token 认证
+
+启用 Token 认证后，所有 API 请求（除了 `/api/v1/health`）都需要在 URL 中附带 `token` 参数：
+
+```bash
+# 未启用 Token
+curl http://localhost:60202/api/v1/players
+
+# 启用 Token 后
+curl "http://localhost:60202/api/v1/players?token=your-secret-token"
+
+# 查询玩家时带 Token
+curl "http://localhost:60202/api/v1/player?name=Steve&token=your-secret-token"
+```
+
+**错误响应**：
+- 缺少 token: `401 Unauthorized` - `{"error": "Missing token parameter"}`
+- token 错误: `403 Forbidden` - `{"error": "Invalid token"}`
 
 ## API 端点
 
