@@ -1,0 +1,27 @@
+# 版本记录(不存储在git中)
+*.log
+*.bak
+
+# xmake
+.xmake/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+*.sln.docstates
+.vs/
+
+# 构建产物
+*.dll
+*.exe
+*.pdb
+*.lib
+*.obj
+*.o
+
+# 临时文件
+*.tmp
+*.temp
