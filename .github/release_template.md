@@ -9,7 +9,7 @@
 
 | File | Description |
 |------|-------------|
-| [📦 `serverinfo-rest-server-windows-x64.zip`](__BASE_URL__/serverinfo-rest-server-windows-x64.zip) | Plugin package for LeviLamina |
+| [📦 `serverinfo-rest-v__VERSION__-server-windows-x64.zip`](__BASE_URL__/serverinfo-rest-v__VERSION__-server-windows-x64.zip) | Plugin package for LeviLamina |
 
 ### 📥 Install via lip
 
@@ -23,7 +23,7 @@ lip update github.com/__REPO__@__VERSION__
 
 ### 📦 Manual Install
 
-1. Download `serverinfo-rest-server-windows-x64.zip`
+1. Download `serverinfo-rest-v__VERSION__-server-windows-x64.zip`
 2. Unzip, you'll get:
    ```
    serverinfo-rest/
