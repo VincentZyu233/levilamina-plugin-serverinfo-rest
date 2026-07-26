@@ -24,16 +24,16 @@ struct Config {
     std::string apiPrefix = "/api/v2";
 
     std::string _comment_enableToken = "🔐👀 是否要求只读查询接口验证 token；健康检查接口始终无需 token";
-    bool enableToken = false;
+    bool enableToken = true;
 
     std::string _comment_token = "🔑📖 只读查询令牌；enableToken=false 时可以留空，禁止与 adminToken 相同";
-    std::string token = "";
+    std::string token = "test12345";
 
     std::string _comment_tokenReceiveMode = "📥🔑 只读 token 接收方式：param | header | both；param 使用 URL query 参数 ?token=...";
     std::string tokenReceiveMode = "both";
 
     std::string _comment_adminToken = "🛡️🔑 管理令牌；绑定、解绑、查询、添加、移除玩家绑定时必须填写，禁止与只读 token 相同";
-    std::string adminToken = "";
+    std::string adminToken = "test6789";
 
     std::string _comment_adminTokenReceiveMode = "📥🛡️ 管理 token 接收方式：param | header | both；默认 header，避免高权限令牌进入 URL";
     std::string adminTokenReceiveMode = "header";
@@ -70,6 +70,9 @@ struct Config {
 
     std::string _comment_dataSaveIntervalSeconds = "💾⏱️ 玩家历史与统计数据自动保存周期，单位秒";
     int dataSaveIntervalSeconds = 60;
+
+    std::string _comment_playerActivityHistoryRetentionDays = "📈🗓️ 玩家活动趋势保留天数；默认 365，设置为 0 或负数表示永久保留";
+    int playerActivityHistoryRetentionDays = 365;
 };
 
 } // namespace serverinfo_rest

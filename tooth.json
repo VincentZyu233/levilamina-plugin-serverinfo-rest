@@ -2,7 +2,7 @@
     "format_version": 3,
     "format_uuid": "289f771f-2c9a-4d73-9f3f-8492495a924d",
     "tooth": "github.com/VincentZyuApps/levilamina-plugin-serverinfo-rest",
-    "version": "0.3.2-beta.2",
+    "version": "0.3.6-beta.8",
     "info": {
         "name": "serverinfo-rest",
         "description": "🌐🖥️🔍 A REST API plugin for LeviLamina to query Minecraft Bedrock Server status and player info. Provides HTTP endpoints for real-time server monitoring. 🌐🖥️🔍 基于 LeviLamina 的 REST API 服务器信息查询插件。通过 HTTP 接口，实现对 Minecraft 基岩版服务器状态、玩家信息的实时查询。🔍🤖",

@@ -1,6 +1,7 @@
 #include "mod/ServerInfoRestMod.h"
 #include "mod/ExecCommandNative.h"
 #include "mod/HttpServer.h"
+#include "mod/PlayerActivityStore.h"
 #include "mod/PlayerDataStore.h"
 #include "mod/TokenAuth.h"
 
@@ -52,7 +53,7 @@
 namespace serverinfo_rest {
 
 namespace {
-constexpr auto PluginVersion = "0.3.2-beta.2";
+constexpr auto PluginVersion = "0.3.6-beta.8";
 
 int hexValue(char ch) {
     if (ch >= '0' && ch <= '9') return ch - '0';
@@ -602,6 +603,15 @@ void ServerInfoRestMod::onServerTick() {
     if (now - mLastPlayerSnapshotAt >= std::chrono::seconds(1)) {
         refreshPlayerSnapshots();
         mLastPlayerSnapshotAt = now;
+        if (mPlayerActivityStore) {
+            std::string activityError;
+            const auto wasAvailable = mPlayerActivityStore->isAvailable();
+            if (!mPlayerActivityStore->recordHeartbeat(unixTimeMs(), getPlayerCount(), activityError)) {
+                getSelf().getLogger().error("[Activity] {}", activityError);
+            } else if (!wasAvailable && mPlayerActivityStore->isAvailable()) {
+                getSelf().getLogger().info("[Activity] Player activity history storage recovered");
+            }
+        }
     }
 
     const auto saveInterval = std::chrono::seconds(std::clamp(mConfig.dataSaveIntervalSeconds, 5, 3600));
@@ -631,8 +641,18 @@ void ServerInfoRestMod::refreshPlayerSnapshots() {
 }
 
 void ServerInfoRestMod::onPlayerJoin(const std::string& xuid, const PlayerSnapshot& info) {
+    const auto nowMs = unixTimeMs();
     if (mPlayerDataStore && mPlayerDataStore->isAvailable()) {
-        mPlayerDataStore->playerJoined(xuid, info.uuid, info.name, unixTimeMs());
+        mPlayerDataStore->playerJoined(xuid, info.uuid, info.name, nowMs);
+    }
+    if (mPlayerActivityStore) {
+        std::string activityError;
+        const auto wasAvailable = mPlayerActivityStore->isAvailable();
+        if (!mPlayerActivityStore->recordJoin(nowMs, xuid, activityError)) {
+            getSelf().getLogger().error("[Activity] {}", activityError);
+        } else if (!wasAvailable && mPlayerActivityStore->isAvailable()) {
+            getSelf().getLogger().info("[Activity] Player activity history storage recovered");
+        }
     }
     std::lock_guard<std::mutex> lock(mPlayerCacheMutex);
     mPlayerCache[xuid] = info;
@@ -743,6 +763,21 @@ bool ServerInfoRestMod::load() {
         logger.warn("[Data] {}", playerDataError);
     }
 
+    mPlayerActivityStore = std::make_unique<PlayerActivityStore>(
+        getSelf().getDataDir() / "player-activity-history",
+        mConfig.playerActivityHistoryRetentionDays
+    );
+    std::string activityError;
+    if (!mPlayerActivityStore->initialize(unixTimeMs(), activityError)) {
+        logger.error("[Activity] Failed to initialize player activity history: {}", activityError);
+    } else {
+        logger.info(
+            "[Activity] Player activity history ready: {}, retentionDays={}",
+            mPlayerActivityStore->directory().string(),
+            mConfig.playerActivityHistoryRetentionDays
+        );
+    }
+
     // 设置日志级别
     ll::io::LogLevel logLevel = parseLogLevel(mConfig.logLevel);
     logger.setLevel(logLevel);
@@ -767,6 +802,10 @@ bool ServerInfoRestMod::load() {
     );
     logger.debug("  - whitelistDataFailurePolicy: {}", mConfig.whitelistDataFailurePolicy);
     logger.debug("  - syncBindingsToBdsAllowlist: {}", mConfig.syncBindingsToBdsAllowlist);
+    logger.debug(
+        "  - playerActivityHistoryRetentionDays: {}",
+        mConfig.playerActivityHistoryRetentionDays
+    );
     if (mConfig.enableToken) {
         logger.info("Token authentication is ENABLED");
         if (mConfig.token.empty()) {
@@ -1151,6 +1190,96 @@ bool ServerInfoRestMod::enable() {
             {"protocol", ll::getNetworkProtocolVersion()},
             {"levilamina", ll::getLoaderVersion().to_string()},
             {"plugin", PluginVersion}
+        };
+        res.setJson(json.dump());
+    });
+
+    // GET /api/v2/players/activity-history - 上海时区单日玩家活动趋势
+    mHttpServer->get(prefix + "/players/activity-history", [this, validateToken](
+        const HttpRequest& req,
+        HttpResponse& res
+    ) {
+        if (!validateToken(req, res)) return;
+        if (!mPlayerActivityStore || !mPlayerActivityStore->isAvailable()) {
+            res.setStatus(503, "Service Unavailable");
+            res.setJson("{\"code\":\"activity_store_unavailable\",\"error\":\"Player activity store is unavailable\"}");
+            return;
+        }
+
+        const auto nowMs = unixTimeMs();
+        const auto today = shanghaiDayForTimestamp(nowMs);
+        auto date = getQueryParam(req.query, "date");
+        if (date.empty()) date = today.date;
+        const auto requestedDay = parseShanghaiDay(date);
+        if (!requestedDay) {
+            res.setStatus(400, "Bad Request");
+            res.setJson("{\"code\":\"invalid_date\",\"error\":\"date must use a valid yyyyMMdd value\"}");
+            return;
+        }
+        if (requestedDay->startMs > today.startMs) {
+            res.setStatus(400, "Bad Request");
+            res.setJson("{\"code\":\"future_date\",\"error\":\"future dates are not supported\"}");
+            return;
+        }
+
+        std::string activityError;
+        const auto activity = mPlayerActivityStore->query(date, nowMs, activityError);
+        if (!activity) {
+            getSelf().getLogger().error("[Activity] Query failed for {}: {}", date, activityError);
+            res.setStatus(500, "Internal Server Error");
+            res.setJson(nlohmann::json({
+                {"code", "activity_query_failed"},
+                {"error", activityError},
+            }).dump());
+            return;
+        }
+
+        nlohmann::json minutes = nlohmann::json::array();
+        for (const auto& minute : activity->minutes) {
+            nlohmann::json item = {
+                {"timestampMs", minute.timestampMs},
+                {"joinCount", minute.joinCount},
+            };
+            item["onlineCount"] = minute.onlineCount
+                ? nlohmann::json(*minute.onlineCount)
+                : nlohmann::json(nullptr);
+            minutes.push_back(std::move(item));
+        }
+
+        nlohmann::json summary = {
+            {"peakOnlineCount", activity->summary.peakOnlineCount},
+            {"averageOnlineCount", activity->summary.averageOnlineCount},
+            {"totalJoinCount", activity->summary.totalJoinCount},
+            {"uniquePlayerCount", activity->summary.uniquePlayerCount},
+            {"peakJoinCount", activity->summary.peakJoinCount},
+            {"validHeartbeatCount", activity->summary.validHeartbeatCount},
+        };
+        summary["latestOnlineCount"] = activity->summary.latestOnlineCount
+            ? nlohmann::json(*activity->summary.latestOnlineCount)
+            : nlohmann::json(nullptr);
+        summary["peakJoinMinuteMs"] = activity->summary.peakJoinMinuteMs
+            ? nlohmann::json(*activity->summary.peakJoinMinuteMs)
+            : nlohmann::json(nullptr);
+        summary["coverageStartMs"] = activity->summary.coverageStartMs
+            ? nlohmann::json(*activity->summary.coverageStartMs)
+            : nlohmann::json(nullptr);
+        summary["coverageEndMs"] = activity->summary.coverageEndMs
+            ? nlohmann::json(*activity->summary.coverageEndMs)
+            : nlohmann::json(nullptr);
+
+        nlohmann::json json = {
+            {"date", activity->day.date},
+            {"timezone", "Asia/Shanghai"},
+            {"startAtMs", activity->day.startMs},
+            {"endAtMs", activity->queryEndMs},
+            {"dayEndAtMs", activity->day.endMs},
+            {"generatedAtMs", nowMs},
+            {"sampleIntervalSeconds", 60},
+            {"complete", activity->complete},
+            {"hasData", !activity->minutes.empty()},
+            {"discardedRecordCount", activity->discardedRecordCount},
+            {"summary", std::move(summary)},
+            {"minutes", std::move(minutes)},
         };
         res.setJson(json.dump());
     });
@@ -1623,11 +1752,16 @@ bool ServerInfoRestMod::enable() {
         getSelf().getLogger().trace("[API] /health endpoint called");
         nlohmann::json json;
         const auto dataAvailable = mPlayerDataStore && mPlayerDataStore->isAvailable();
-        json["status"] = dataAvailable ? "healthy" : "degraded";
+        const auto activityAvailable = mPlayerActivityStore && mPlayerActivityStore->isAvailable();
+        json["status"] = dataAvailable && activityAvailable ? "healthy" : "degraded";
         json["playerData"] = {
             {"available", dataAvailable},
             {"recoveredFromBackup", mPlayerDataStore && mPlayerDataStore->wasRecoveredFromBackup()},
             {"whitelistFailurePolicy", mConfig.whitelistDataFailurePolicy}
+        };
+        json["playerActivity"] = {
+            {"available", activityAvailable},
+            {"retentionDays", mConfig.playerActivityHistoryRetentionDays}
         };
         json["timestamp"] = unixTimeMs();
         json["uptime"] = getUptimeMs();
@@ -1642,8 +1776,10 @@ bool ServerInfoRestMod::enable() {
         json["version"] = PluginVersion;
         json["description"] = "REST API for Minecraft Bedrock Server information";
         const auto dataAvailable = mPlayerDataStore && mPlayerDataStore->isAvailable();
-        json["status"] = dataAvailable ? "healthy" : "degraded";
+        const auto activityAvailable = mPlayerActivityStore && mPlayerActivityStore->isAvailable();
+        json["status"] = dataAvailable && activityAvailable ? "healthy" : "degraded";
         json["playerDataAvailable"] = dataAvailable;
+        json["playerActivityAvailable"] = activityAvailable;
         json["endpoints"] = {
             {"GET " + prefix + "/status", "Server status overview"},
             {"GET " + prefix + "/overview", "Combined online status snapshot"},
@@ -1651,6 +1787,7 @@ bool ServerInfoRestMod::enable() {
             {"GET " + prefix + "/server", "Server information"},
             {"GET " + prefix + "/players", "List all online players"},
             {"GET " + prefix + "/players/count", "Get online player count"},
+            {"GET " + prefix + "/players/activity-history?date=<yyyyMMdd>", "Get player activity history"},
             {"GET " + prefix + "/players/names", "Get list of player names"},
             {"GET " + prefix + "/player?name=<name>", "Get specific online player information"},
             {"GET " + prefix + "/players/history?page=<page>", "Get historical players"},

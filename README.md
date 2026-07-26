@@ -121,7 +121,9 @@ BDS服务端/
     "_comment_syncBindingsToBdsAllowlist": "🔄📋 是否将账号绑定同步到 BDS allowlist；启用后绑定与解绑实时同步，并在启动时补全已有绑定",
     "syncBindingsToBdsAllowlist": false,
     "_comment_dataSaveIntervalSeconds": "💾⏱️ 玩家历史与统计数据自动保存周期，单位秒",
-    "dataSaveIntervalSeconds": 60
+    "dataSaveIntervalSeconds": 60,
+    "_comment_playerActivityHistoryRetentionDays": "📈🗓️ 玩家活动趋势保留天数；默认 365，设置为 0 或负数表示永久保留",
+    "playerActivityHistoryRetentionDays": 365
 }
 ```
 
@@ -159,6 +161,7 @@ BDS服务端/
 | `whitelistDataFailurePolicy` | string | `"fail-open"` | 数据文件与备份都损坏时使用 `fail-open` 暂停拦截，或 `fail-closed` 拒绝无法验证的玩家 |
 | `syncBindingsToBdsAllowlist` | bool | `false` | 是否在绑定变更时同步 BDS allowlist，并在启动时补全已有绑定；关闭时不清理历史项目 |
 | `dataSaveIntervalSeconds` | int | `60` | 玩家历史与统计数据保存周期 |
+| `playerActivityHistoryRetentionDays` | int | `365` | 玩家活动趋势保留天数；设置为 `0` 或负数时永久保留，不执行过期清理 |
 
 ### Token 认证
 
@@ -243,6 +246,7 @@ API v2 只有“已绑定”和“未绑定”两种状态，不再区分普通�
 | 服务器详细信息 | `GET /api/v2/server` | 世界名称、在线与最大人数、BDS 版本、LeviLamina 版本、协议版本和插件版本 | 根据配置决定 |
 | 在线玩家详情 | `GET /api/v2/players` | 所有在线玩家的名称、XUID 和 UUID | 根据配置决定 |
 | 在线人数 | `GET /api/v2/players/count` | 当前在线玩家数量 | 根据配置决定 |
+| 玩家活动趋势 | `GET /api/v2/players/activity-history?date=<yyyyMMdd>` | 上海时区单日每分钟在线人数、进入次数、独立玩家与覆盖时间 | 根据配置决定 |
 | 在线玩家名 | `GET /api/v2/players/names` | 当前在线玩家名列表 | 根据配置决定 |
 | 指定在线玩家 | `GET /api/v2/player?name=<玩家名>` | 指定在线玩家的身份、网络、语言、权限和坐标信息 | 根据配置决定 |
 | 历史玩家列表 | `GET /api/v2/players/history?page=<页码>&pageSize=<每页数量>` | 历史玩家分页、首次与最后出现时间、累计游玩时间、加入次数、挖掘数和击杀数 | 根据配置决定 |
@@ -362,6 +366,46 @@ GET /api/v2/players/count
 }
 ```
 
+### 玩家活动趋势
+
+```http
+GET /api/v2/players/activity-history?date=20260725
+```
+
+`date` 可省略，默认查询上海时区当天；显式传入时只接受严格的 `yyyyMMdd`。未来日期返回 `400` 和 `future_date`，不存在数据的有效日期仍返回 `200`，并将 `hasData` 设为 `false`。
+
+服务端每个自然分钟写入一次在线人数心跳，并记录每次玩家进入事件。相邻分钟缺少心跳表示该时间段没有可靠的在线人数数据，客户端应断开折线，而不是补成零人。
+
+```json
+{
+  "date": "20260725",
+  "timezone": "Asia/Shanghai",
+  "startAtMs": 1784908800000,
+  "endAtMs": 1784952000000,
+  "dayEndAtMs": 1784995200000,
+  "sampleIntervalSeconds": 60,
+  "complete": false,
+  "hasData": true,
+  "summary": {
+    "latestOnlineCount": 3,
+    "peakOnlineCount": 8,
+    "averageOnlineCount": 3.4,
+    "totalJoinCount": 15,
+    "uniquePlayerCount": 9,
+    "peakJoinCount": 3,
+    "peakJoinMinuteMs": 1784937600000,
+    "validHeartbeatCount": 720,
+    "coverageStartMs": 1784908800000,
+    "coverageEndMs": 1784951940000
+  },
+  "minutes": [
+    { "timestampMs": 1784908800000, "onlineCount": 2, "joinCount": 1 }
+  ]
+}
+```
+
+活动原始记录保存在 `plugins/serverinfo-rest/data/player-activity-history/YYYYMMDD.jsonl`。加入事件中的 XUID 仅用于服务端计算当日独立玩家数，REST API 只返回聚合结果，不返回活动身份明细。
+
 ### 玩家名列表
 
 ```
@@ -472,7 +516,7 @@ python test/test_api.py --host 91.whzz.online --port 60202
 python test/test_api.py --host localhost --port 60202 \
   --run-admin-tests --admin-token your-admin-token --admin-player ApiTestPlayer
 ```
-默认测试会检查 8 个只读 API v2 路由和根路径。提供 `--player` 后会增加在线玩家详情与历史统计；再提供 `--run-admin-tests`、`--admin-token` 和 `--admin-player` 后，会覆盖命令、绑定统计以及 bind、unbind、state、add、remove 全部管理路由。脚本分别汇总测试用例数和 17 个 API v2 唯一路由的覆盖数，根路径 `GET /` 另计。
+默认测试会检查 9 个只读 API v2 路由和根路径。提供 `--player` 后会增加在线玩家详情与历史统计；再提供 `--run-admin-tests`、`--admin-token` 和 `--admin-player` 后，会覆盖命令、绑定统计以及 bind、unbind、state、add、remove 全部管理路由。脚本分别汇总测试用例数和 18 个 API v2 唯一路由的覆盖数，根路径 `GET /` 另计。
 
 管理流程会先删除 `--admin-player` 的已有绑定，再依次验证普通绑定与解绑、绑定账号统计、管理员代绑、`force=true` 双冲突替换、状态查询和最终清理。远程命令功能关闭时，符合配置的 `403` 响应也判定为接口语义通过，但不会声称命令已经执行。
 

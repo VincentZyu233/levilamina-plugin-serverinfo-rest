@@ -50,6 +50,7 @@ API_V2_ROUTES = {
     ("GET", "/overview"),
     ("GET", "/player"),
     ("GET", "/players"),
+    ("GET", "/players/activity-history"),
     ("GET", "/players/count"),
     ("GET", "/players/history"),
     ("GET", "/players/names"),
@@ -244,6 +245,22 @@ def valid_player_detail_response(status: int, data: ResponseData) -> bool:
     )
 
 
+def valid_activity_response(status: int, data: ResponseData) -> bool:
+    if status != 200 or not isinstance(data, dict):
+        return False
+    summary = data.get("summary")
+    minutes = data.get("minutes")
+    return (
+        data.get("timezone") == "Asia/Shanghai"
+        and isinstance(data.get("date"), str)
+        and len(data["date"]) == 8
+        and isinstance(summary, dict)
+        and isinstance(minutes, list)
+        and isinstance(data.get("hasData"), bool)
+        and data.get("sampleIntervalSeconds") == 60
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="🧪 serverinfo-rest API v2 测试脚本",
@@ -328,6 +345,13 @@ def main() -> int:
     run_case("服务器信息", "🖥️", "GET", "/server")
     run_case("玩家列表", "👥", "GET", "/players")
     run_case("玩家数量", "🔢", "GET", "/players/count")
+    run_case(
+        "玩家活动趋势",
+        "📈",
+        "GET",
+        "/players/activity-history",
+        validator=valid_activity_response,
+    )
     run_case("玩家名列表", "📝", "GET", "/players/names")
     run_case("历史玩家分页", "📚", "GET", "/players/history", query={"page": 1, "pageSize": 10})
 

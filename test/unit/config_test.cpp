@@ -11,6 +11,7 @@ TEST(ConfigTest, DefaultsToApiVersionTwoContract) {
     EXPECT_EQ(config.apiPrefix, "/api/v2");
     EXPECT_FALSE(config.syncBindingsToBdsAllowlist);
     EXPECT_FALSE(config.requireWhitelistAuthorizationOnJoin);
+    EXPECT_EQ(config.playerActivityHistoryRetentionDays, 365);
 }
 
 } // namespace

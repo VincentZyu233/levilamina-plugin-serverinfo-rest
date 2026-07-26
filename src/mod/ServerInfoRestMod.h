@@ -18,6 +18,7 @@ namespace serverinfo_rest {
 
 class HttpServer;
 class PlayerDataStore;
+class PlayerActivityStore;
 
 struct TpsSnapshot {
     double realtime = 0.0;
@@ -57,6 +58,7 @@ private:
     Config mConfig;
     std::unique_ptr<HttpServer> mHttpServer;
     std::unique_ptr<PlayerDataStore> mPlayerDataStore;
+    std::unique_ptr<PlayerActivityStore> mPlayerActivityStore;
 
     // 玩家缓存 (线程安全)
     mutable std::mutex mPlayerCacheMutex;
